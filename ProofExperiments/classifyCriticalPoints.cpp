@@ -45,6 +45,7 @@ void mexFunction(int nOutArray, mxArray *OutArray[], int nInArray, const mxArray
 				if (D[i+di + N*(j+dj)] < D[i + N*j]) {
 					Ns[neighb] = -1;
 				}
+				//TODO: What if they're equal?
 				else {
 					Ns[neighb] = 1;
 				}
@@ -52,7 +53,6 @@ void mexFunction(int nOutArray, mxArray *OutArray[], int nInArray, const mxArray
 			//Now figure out if this is a regular point, min, max, or saddle
 			double switches = 0;
 			for (int neighb = 0; neighb < 8; neighb++) {
-				
 				if (Ns[neighb] != Ns[(neighb+1)%8]) {
 					switches++;
 				}

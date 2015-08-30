@@ -1,5 +1,7 @@
-NPoints = 400;
-t = linspace(0, 2*pi, NPoints);
+NPoints = 1000;
+t = linspace(0, 1, NPoints);
+t = t.^2;
+t = t*2*pi;
 X = [cos(t(:)) sin(2*t(:))];
 D = squareform(pdist(X));
 I = classifyCriticalPoints(D);
@@ -25,7 +27,7 @@ plot(xmaxs(:), ymaxs(:), 'rx');
 xsaddles = x(I >= 4);
 ysaddles = y(I >= 4);
 plot(xsaddles(:), ysaddles(:), 'cx');
-print('-dpng', '-r100', 'AllCriticalPoints.png');
+print('-dpng', '-r200', 'AllCriticalPoints.png');
 
 %Now plot neighborhoods of found maxs, mins, and saddles
 dNeighb = 5;
