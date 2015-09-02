@@ -126,12 +126,7 @@ class MorseComplex(object):
         #Add nodes in ascending order
         for node in [self.borderNode] + [self.nodes[o] for o in self.order]:
             neighbds = np.array([n.d - node.d for n in node.neighbs])
-            if node.index == MorseNode.MIN:
-                #Flow out in all directions from a min
-                node.flowout = node.neighbs
-                for n in node.neighbs:
-                    n.flowin.append(node)
-            elif node.index == MorseNode.REGULAR:
+            if node.index == MorseNode.REGULAR:
                 if len(node.flowin) > 0:
                     flowToNode = node.neighbs[np.argmax(neighbds)]
                     node.flowout.append(flowToNode)
@@ -206,10 +201,10 @@ class MorseComplex(object):
                             [i2, j2] = [i1, j1+1]
                     plt.plot([j1, j2], [i1, i2], 'r')
         self.plotCriticalPoints(drawRegularPoints)
-        plt.show()
     
     def plotFlowLines(self):
-        N = self.D.shape[0]
+        D = self.D
+        N = D.shape[0]
         implot = plt.imshow(-self.D, interpolation = "none")
         implot.set_cmap('Greys')
         plt.hold(True)   
@@ -228,15 +223,24 @@ class MorseComplex(object):
                     elif j2 == i2+1:
                         [i1, j1] = [i2, i2]
                 plt.plot([j1, j2], [i1, i2], 'r')
-        plt.show()     
-
+        b = np.round(0.01*D.shape[0])
+        plt.xlim((-b, D.shape[1]+b))
+        plt.ylim((-b, D.shape[0]+b))
+        plt.axis('off')
+    
+    #For each critical point in the SSM associated with a curve in X,
+    #plot the neighborhoods in X that gave rise to that SSM region
+    def plotCriticalCurveRegions(self, X):
+        print "TODO"
 
 if __name__ == '__main__':
-    N = 200
-    t = np.linspace(0, 2*np.pi, N)
+    N = 500
+    p = 1.62
+    thist = 2*np.pi*(np.linspace(0, 1, N)**p)
+    ps = np.linspace(0.1, 2, 20)
     X = np.zeros((N, 2))
-    X[:, 0] = np.cos(t)
-    X[:, 1] = np.sin(2*t)
+    X[:, 0] = np.cos(thist)
+    X[:, 1] = np.sin(2*thist)
     dotX = np.reshape(np.sum(X*X, 1), (X.shape[0], 1))
     D = (dotX + dotX.T) - 2*(np.dot(X, X.T))
     c = MorseComplex(D)
@@ -244,3 +248,32 @@ if __name__ == '__main__':
     print "euler = %i  (nMins = %i, nSaddles = %i, nMaxes = %i)"%c.getEuler()
     c.makeFlowLines()
     c.plotFlowLines()
+    plt.title("p = %g"%p)
+    plt.show()
+
+if __name__ == '__main__2':
+    N = 1000
+    t = np.linspace(0, 1, N)
+    ps = np.linspace(0.1, 3, 200)
+    for i in range(len(ps)):
+        p = ps[i]
+        thist = 2*np.pi*t**p
+        X = np.zeros((N, 2))
+        X[:, 0] = np.cos(thist)
+        X[:, 1] = np.sin(2*thist)
+        dotX = np.reshape(np.sum(X*X, 1), (X.shape[0], 1))
+        D = (dotX + dotX.T) - 2*(np.dot(X, X.T))
+        c = MorseComplex(D)
+        c.makeMesh()
+        eulerStr = "euler = %i  (nMins = %i, nSaddles = %i, nMaxes = %i)"%c.getEuler()
+        print eulerStr
+        c.makeFlowLines()
+        plt.figure(figsize=(10, 5))
+        plt.subplot(1, 2, 1)
+        plt.plot(X[:, 0], X[:, 1], '.')
+        plt.title("p = %g"%p)
+        plt.subplot(1, 2, 2)
+        c.plotFlowLines()
+        plt.title(eulerStr)
+        plt.savefig("%i.png"%i)
+        plt.close()
