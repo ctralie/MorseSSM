@@ -2,6 +2,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import math
+import scipy.io as sio
 
 class MorseNode(object):
     (REGULAR, MIN, SADDLE, MAX, UNKNOWN) = (-1, 0, 1, 2, 3)
@@ -232,10 +233,48 @@ class MorseComplex(object):
     #plot the neighborhoods in X that gave rise to that SSM region
     def plotCriticalCurveRegions(self, X):
         print "TODO"
+        
+    ###################################################################
+    ##                       I/O FUNCTIONS                           ##
+    ###################################################################
+    def saveOFFMesh(self, fileprefix):
+        #First save mesh file
+        faces = {}
+        for n in self.nodes:
+            if n.addtime == -1:
+                continue
+            neighbs = [ne for ne in n.neighbs if ne.addtime > -1]
+            for i in range(len(neighbs)):
+                a = neighbs[i]
+                b = neighbs[(i+1)%len(neighbs)]
+                idxs = [n.addtime, b.addtime, a.addtime]
+                while not (idxs[0] < idxs[1] and idxs[0] < idxs[2]):
+                    idxs = [idxs[2], idxs[0], idxs[1]]
+                faces["%i:%i:%i"%tuple(idxs)] = idxs
+        fout = open("%s.off"%fileprefix, 'w')
+        fout.write("OFF\n%i %i 0\n"%(len(self.nodes), len(faces)))
+        scale = np.max(self.D)/self.D.shape[0]
+        for o in self.order:
+            n = self.nodes[o]
+            fout.write("%g %g %g\n"%(n.i*scale, n.j*scale, n.d))
+        for fstring in faces:
+            f = faces[fstring]
+            fout.write("3 %i %i %i\n"%tuple(f))
+        fout.close()
+        #Now save indices into critical points in the mesh
+        saddles = []
+        maxes = []
+        for node in c.nodes:
+            if node.index == MorseNode.SADDLE:
+                saddles.append(node.addtime)
+            elif node.index == MorseNode.MAX:
+                maxes.append(node.addtime)
+        sio.savemat("%s.mat"%fileprefix, {'saddles':np.array(saddles), 'maxes':np.array(maxes)})
+        
 
 if __name__ == '__main__':
-    N = 500
-    p = 1.62
+    N = 30
+    p = 1.7
     thist = 2*np.pi*(np.linspace(0, 1, N)**p)
     ps = np.linspace(0.1, 2, 20)
     X = np.zeros((N, 2))
@@ -250,6 +289,7 @@ if __name__ == '__main__':
     c.plotFlowLines()
     plt.title("p = %g"%p)
     plt.show()
+    c.saveOFFMesh("Figure8")
 
 if __name__ == '__main__2':
     N = 1000
