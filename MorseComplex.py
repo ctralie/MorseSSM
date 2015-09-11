@@ -231,8 +231,55 @@ class MorseComplex(object):
     
     #For each critical point in the SSM associated with a curve in X,
     #plot the neighborhoods in X that gave rise to that SSM region
-    def plotCriticalCurveRegions(self, X):
-        print "TODO"
+    #NOTE: This function is really only useful for 2D curves
+    def plotCriticalCurveRegions(self, X, fileprefix, neighbsize = 5):
+        [isaddle, imin, imax] = [0, 0, 0]
+        for n in self.nodes:
+            if n.index == MorseNode.REGULAR:
+                continue
+            filename = ""
+            color = 'k'
+            if n.index == MorseNode.MIN:
+                filename = "%smin%i.png"%(fileprefix, imin)
+                imin += 1
+                color = 'b'
+            elif n.index == MorseNode.SADDLE:
+                filename = "%ssaddle%i.png"%(fileprefix, isaddle)
+                isaddle += 1
+                color = 'g'
+            elif n.index == MorseNode.MAX:
+                filename = "%smax%i.png"%(fileprefix, imax)
+                imax += 1
+                color = 'r'
+            plt.clf()
+            plt.subplot(1, 2, 1)
+            plt.imshow(self.D)
+            plt.hold(True)
+            plt.scatter(n.j, n.i, 100, color)
+            plt.subplot(1, 2, 2)
+            plt.plot(X[:, 0], X[:, 1], 'b.')
+            plt.hold(True)
+            n1 = [max(0, n.i - neighbsize), min(self.D.shape[0], n.i+neighbsize)]
+            n2 = [max(0, n.j - neighbsize), min(self.D.shape[0], n.j+neighbsize)]
+            plt.plot(X[n1[0]:n1[1], 0], X[n1[0]:n1[1], 1], 'r', linewidth = 5.0)
+            plt.scatter(X[n.i, 0], X[n.i, 1], 100, 'r')
+            plt.plot(X[n2[0]:n2[1], 0], X[n2[0]:n2[1], 1], 'r', linewidth = 5.0)
+            plt.scatter(X[n.j, 0], X[n.j, 1], 100, 'r')
+            plt.savefig(filename)
+        fout = open("%s.html"%fileprefix, 'w')        
+        fout.write("<h1>Mins</h1>\n<BR>\n<table>\n<tr>")
+        for i in range(imin):
+            fout.write("<td><img src = '%smin%i.png'></td>"%(fileprefix, i))
+        fout.write("</tr></table><BR>")
+        fout.write("<h1>Maxes</h1>\n<BR>\n<table>\n<tr>")
+        for i in range(imax):
+            fout.write("<td><img src = '%smax%i.png'></td>"%(fileprefix, i))
+        fout.write("</tr></table><BR>")
+        fout.write("<h1>Saddles</h1>\n<BR>\n<table>\n<tr>")
+        for i in range(isaddle):
+            fout.write("<td><img src = '%ssaddle%i.png'></td>"%(fileprefix, i))
+        fout.write("</tr></table><BR>")
+        fout.close()
         
     ###################################################################
     ##                       I/O FUNCTIONS                           ##
@@ -273,8 +320,8 @@ class MorseComplex(object):
         
 
 if __name__ == '__main__':
-    N = 30
-    p = 1.7
+    N = 500
+    p = 1
     thist = 2*np.pi*(np.linspace(0, 1, N)**p)
     ps = np.linspace(0.1, 2, 20)
     X = np.zeros((N, 2))
@@ -290,6 +337,7 @@ if __name__ == '__main__':
     plt.title("p = %g"%p)
     plt.show()
     c.saveOFFMesh("Figure8")
+    c.plotCriticalCurveRegions(X, "Figure8")
 
 if __name__ == '__main__2':
     N = 1000

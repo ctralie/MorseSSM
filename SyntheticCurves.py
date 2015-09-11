@@ -69,7 +69,7 @@ def smoothCurve(X, Fac):
 if __name__ == "__main__":
     np.random.seed(100)
     X = makeRandomWalkCurve(4, 20, 2)
-    Y = smoothCurve(X, 10)
+    Y = smoothCurve(X, 20)
     plt.subplot(1, 2, 1)
     plt.scatter(Y[:, 0], Y[:, 1], 10, 'b')
     plt.plot(Y[:, 0], Y[:, 1], 'r')
@@ -82,3 +82,4 @@ if __name__ == "__main__":
     plt.subplot(1, 2, 2)
     c.plotFlowLines()
     plt.show()
+    c.plotCriticalCurveRegions(Y, "Synthetic")
