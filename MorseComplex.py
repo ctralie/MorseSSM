@@ -297,13 +297,14 @@ class MorseComplex(object):
                 idxs = [n.addtime, b.addtime, a.addtime]
                 while not (idxs[0] < idxs[1] and idxs[0] < idxs[2]):
                     idxs = [idxs[2], idxs[0], idxs[1]]
+                idxs = [idxs[2], idxs[1], idxs[0]]
                 faces["%i:%i:%i"%tuple(idxs)] = idxs
         fout = open("%s.off"%fileprefix, 'w')
         fout.write("OFF\n%i %i 0\n"%(len(self.nodes), len(faces)))
         scale = np.max(self.D)/self.D.shape[0]
         for o in self.order:
             n = self.nodes[o]
-            fout.write("%g %g %g\n"%(n.i*scale, n.j*scale, n.d))
+            fout.write("%g %g %g\n"%(n.j*scale, n.i*scale, n.d))
         for fstring in faces:
             f = faces[fstring]
             fout.write("3 %i %i %i\n"%tuple(f))
@@ -320,8 +321,8 @@ class MorseComplex(object):
         
 
 if __name__ == '__main__':
-    N = 500
-    p = 1
+    N = 50
+    p = 1.68
     thist = 2*np.pi*(np.linspace(0, 1, N)**p)
     ps = np.linspace(0.1, 2, 20)
     X = np.zeros((N, 2))
