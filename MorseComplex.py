@@ -321,7 +321,7 @@ class MorseComplex(object):
         
 
 if __name__ == '__main__':
-    N = 50
+    N = 500
     p = 1.68
     thist = 2*np.pi*(np.linspace(0, 1, N)**p)
     ps = np.linspace(0.1, 2, 20)
@@ -338,7 +338,7 @@ if __name__ == '__main__':
     plt.title("p = %g"%p)
     plt.show()
     c.saveOFFMesh("Figure8")
-    c.plotCriticalCurveRegions(X, "Figure8")
+    #c.plotCriticalCurveRegions(X, "Figure8")
 
 if __name__ == '__main__2':
     N = 1000

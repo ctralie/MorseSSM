@@ -2,7 +2,7 @@ addpath(genpath('toolbox_fast_marching'));
 load('Figure8.mat');
 maxes = maxes+1;
 saddles = saddles+1;
-saddles = saddles(4);
+saddles = saddles(3);
 
 [V, F] = read_mesh('Figure8.off');
 
