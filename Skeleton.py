@@ -7,6 +7,8 @@ from OpenGL.GL import *
 from OpenGL.GLU import *
 from OpenGL.GLUT import *
 import numpy as np
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 def getRotationMatrix(rx, ry, rz):
     rotX = np.eye(4)
@@ -175,6 +177,23 @@ class Skeleton(object):
                 print "Warning: Finished, but got line %s"%line
         fin.close()
 
+    #Functions for exporting tree to numpy
+    def getEdgesRec(self, node, edges, kindex):
+        i1 = kindex[node.name]
+        for c in node.children:
+            i2 = kindex[c.name]
+            edges.append([i1, i2])
+            self.getEdgesRec(c, edges, kindex)
+    
+    def getEdges(self):
+        keys = self.bones.keys()
+        kindex = {}
+        for i in range(len(keys)):
+            kindex[keys[i]] = i
+        edges = []
+        self.getEdgesRec(self.bones['root'], edges, kindex)
+        return np.array(edges)
+
 class SkeletonAnimator(object):
     def __init__(self, skeleton):
         self.skeleton = skeleton
@@ -205,7 +224,7 @@ class SkeletonAnimator(object):
         #Bone is specified in its parent's coordinate system
         pos = matrix.dot(T[:, 3])
         self.bonePositions[bone.name][index, :] = pos[0:3].flatten()
-        matrix = matrix.dot(R.dot(T))
+        matrix = matrix.dot(T)
         for child in bone.children:
             self.calcPositions(child, bone, index, matrix)
     
@@ -302,7 +321,7 @@ class SkeletonAnimator(object):
     def getBBox(self):
         bboxmin = np.min(self.bonePositions['root'], 0)
         bboxmax = np.max(self.bonePositions['root'], 0)
-        for bonestr in self.bonePositions
+        for bonestr in self.bonePositions:
             pos = self.bonePositions[bonestr]
             minpos = np.min(pos, 0)
             maxpos = np.max(pos, 0)
@@ -310,10 +329,29 @@ class SkeletonAnimator(object):
             bboxmax = [max(bboxmax[i], maxpos[i]) for i in range(3)]
         return np.array([bboxmin, bboxmax])
 
+    #Functions for exporting data to numpy
+    def getState(self, index):
+        keys = self.bonePositions.keys()
+        N = len(keys)
+        X = np.zeros((N, 3))
+        for i in range(N):
+            X[i, :] = self.bonePositions[keys[i]][index, :]
+        return X
+
 if __name__ == '__main__':
     skeleton = Skeleton()
-    skeleton.initFromFile("test.asf")
-    print "Version: ", skeleton.version
-    print "Documentation: ", skeleton.documentation
+    skeleton.initFromFile("13.asf")
     activity = SkeletonAnimator(skeleton)
-    activity.initFromFile("test.amc")
+    activity.initFromFile("13_11.amc")
+    index = 10
+    edges = skeleton.getEdges()
+    X = activity.getState(index)
+    
+    fig = plt.figure()
+    ax = Axes3D(fig)
+    plt.plot(X[:, 0], X[:, 1], X[:, 2], 'b.')
+    plt.hold(True)
+    for i in range(edges.shape[0]):
+        e = edges[i, :].flatten()
+        plt.plot(X[e, 0], X[e, 1], X[e, 2], 'r')
+    plt.show()
