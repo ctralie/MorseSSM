@@ -176,6 +176,20 @@ class Skeleton(object):
             elif parseState == Skeleton.PARSE_FINISHED:
                 print "Warning: Finished, but got line %s"%line
         fin.close()
+        #Now rotate directions to local coordinate system
+        for bonestr in self.bones:
+            bone = self.bones[bonestr]
+            a = bone.axis
+            if isinstance(a, basestring):
+                #Skip root node
+                continue
+            d = bone.direction
+            a = [thisa*np.pi/180 for thisa in a]
+            print a
+            R = getRotationMatrix(-a[0], -a[1], -a[2])
+            p = np.array([d[0], d[1], d[2], d[1]])
+            p = R.dot(p)
+            #bone.direction = p[0:3]
 
     #Functions for exporting tree to numpy
     def getEdgesRec(self, node, edges, kindex):
@@ -224,7 +238,7 @@ class SkeletonAnimator(object):
         #Bone is specified in its parent's coordinate system
         pos = matrix.dot(T[:, 3])
         self.bonePositions[bone.name][index, :] = pos[0:3].flatten()
-        matrix = matrix.dot(T)
+        matrix = matrix.dot(R.dot(T))
         for child in bone.children:
             self.calcPositions(child, bone, index, matrix)
     
@@ -299,12 +313,12 @@ class SkeletonAnimator(object):
         C = colors[bone.id%len(colors)]
         glColor3f(C[0], C[1], C[2])
         
-        glPointSize(20)
-        glBegin(GL_POINTS)
-        glVertex3f(P1[0], P1[1], P1[2])
-        glEnd()
+        glPushMatrix()
+        glTranslatef(P1[0], P1[1], P1[2])
+        glutSolidSphere(0.2,20,20)
+        glPopMatrix()
         
-        glLineWidth(10)
+        glLineWidth(2)
         glBegin(GL_LINES)
         glVertex3f(P1[0], P1[1], P1[2])
         glVertex3f(P2[0], P2[1], P2[2])
