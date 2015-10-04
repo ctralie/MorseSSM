@@ -5,7 +5,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 import scipy.io as sio
-from UnionFind import *
 
 
 #Get index into an upper triangular matrix minus the diagonal
@@ -34,15 +33,17 @@ def distComparator(n1, n2):
 
 class MorseNode(object):
     (REGULAR, MIN, SADDLE, MAX, UNKNOWN) = (-1, 0, 1, 2, 3)
-    def __init__(self, i, j, d):
+    TypeStrings = {REGULAR:'REGULAR', MIN:'MIN', SADDLE:'SADDLE', MAX:'MAX', UNKNOWN:'UNKNOWN'}
+    def __init__(self, i, j, d, listIdx):
         self.i = i
         self.j = j
         self.d = d
+        self.listIdx = listIdx
         self.neighbs = []
-        self.flowin = []
-        self.flowout = []
         self.index = MorseNode.REGULAR
         self.signChanges = 0
+        self.P = self #Pointer for union find
+        self.treeNeighbs = [] #For storing merge tree pairings (TODO: Duplicate this variable for join/split trees)
     
     def calcIndex(self):
         signChanges = 0
@@ -66,14 +67,24 @@ class MorseNode(object):
             print ("%g: " + "%g "*len(self.neighbs))%tuple([self.d] + [n.d for n in self.neighbs])
         self.signChanges = signChanges
 
-class MergeTreeNode(object):
-    def __init__(self, morseNode):
-        self.morseNode = morseNode
-        self.index = morseNode.index
-        self.d = morseNode.d
-        self.i = morseNode.i
-        self.j = morseNode.j
-        self.neighbs = []
+#Union find "find" with path compression
+def UFFind(u):
+    if not u.P == u:
+        u.P = UFFind(u.P) #Path compression
+        return u.P
+    return u
+
+#Union find "union" with merging to component with earlier birth time
+def UFUnion(u, v):
+    uP = UFFind(u)
+    vP = UFFind(v)
+    if uP == vP:
+        return #Already in union
+    #Merge to the root of the one with the earlier component time
+    [ufirst, usecond] = [uP, vP]
+    if distComparator(usecond, ufirst) == -1:
+        [usecond, ufirst] = [ufirst, usecond]
+    usecond.P = ufirst
 
 class SSMComplex(object):
     def __init__(self, D):
@@ -93,6 +104,7 @@ class SSMComplex(object):
     ###################################################################
     ##              TOPOLOGICAL STRUCTURE ALGORITHMS                 ##
     ###################################################################
+    
     #Create all of the vertices and edges between them on the upper triangular
     #part of the mesh minus the diagonal.  Once this is done, classify each
     #point as regular/min/max/saddle
@@ -101,16 +113,14 @@ class SSMComplex(object):
         N = self.D.shape[0]
         #Create a node that connects to all boundary points
         idx = np.round(N/2)
-        self.borderNode = MorseNode(idx, idx, 0)
+        self.borderNode = MorseNode(idx, idx, 0, N*(N-1)/2)
         self.borderNode.index = MorseNode.MIN
-        d = np.zeros(N*(N-1)/2)
         #Now add all other nodes (only include upper triangular part
         #minus the diagonal)
         idx = 0
         for i in range(N):
             for j in range(i+1, N):
-                self.nodes.append(MorseNode(i, j, self.D[i, j]))
-                d[idx] = self.D[i, j]
+                self.nodes.append(MorseNode(i, j, self.D[i, j], idx))
                 idx += 1
         #Add neighbors in graph
         ns = [[0, -1], [-1, -1], [-1, 0], [-1, 1], [0, 1], [1, 1], [1, 0], [1, -1]]
@@ -158,13 +168,62 @@ class SSMComplex(object):
             elif n.index == MorseNode.SADDLE:
                 self.saddles.append(n)
         self.mins.append(self.borderNode)
+        self.nodes.append(self.borderNode)
 
     def getEuler(self):
         nMaxes = len(self.maxes)
         nMins = len(self.mins)
         nSaddles = len(self.saddles)
         return (nMins - nSaddles + nMaxes, nMins, nSaddles, nMaxes)
-              
+
+    #Recursive helper function for making merge tree
+    def getMergeComponent(self, node, repNodes):
+        @print "%i(%s) "%(node.listIdx, MorseNode.TypeStrings[node.index])
+        node.touched = True
+        #Implicitly do nothing if this is a min since regular points
+        #above it connected to it will already have merged to the min
+        if node.index == MorseNode.MIN:
+            return
+        for neighb in node.neighbs:
+            if not neighb.touched and distComparator(neighb, node) == -1:
+                self.getMergeComponent(neighb, repNodes)
+        if node.index == MorseNode.REGULAR:
+            #Merge components below to this node
+            for neighb in node.neighbs:
+                if distComparator(neighb, node) == -1:
+                    UFUnion(neighb, node)
+        elif node.index == MorseNode.SADDLE:
+            #First figure out the unique components coming into this
+            #saddle from below and record the connections
+            components = [UFFind(n).listIdx for n in node.neighbs if distComparator(n, node) == -1]
+            components = np.unique(components)
+#            print "Merging nodes:"
+#            for c in components:
+#                print "%i: Type = %s"%(c, MorseNode.TypeStrings[self.nodes[c].index])
+            components = [repNodes[self.nodes[i]] for i in components]
+            for c in components:
+                c.treeNeighbs.append(node)
+                node.treeNeighbs.append(c)
+            #Now merge the components to the saddle
+            for c in components:
+                UFUnion(c, node)
+            #Update the representative of this class to be the saddle now
+            u = UFFind(node)
+            repNodes[u] = node
+
+    #Compute the merge tree
+    def makeMergeTree(self):
+        for node in self.nodes:
+            node.touched = False
+        #At first all of the mins represent themselves, but eventually
+        #they can be represented by saddles
+        repNodes = {}
+        for m in self.mins:
+            repNodes[m] = m
+        for s in self.saddles:
+            self.getMergeComponent(s, repNodes)            
+            
+    
     ###################################################################
     ##                    PLOTTING FUNCTIONS                         ##
     ###################################################################
@@ -195,17 +254,17 @@ class SSMComplex(object):
                     plt.plot([j1, j2], [i1, i2], 'r')
         self.plotCriticalPoints()
     
-    def plotMergeTree(self, minNodes, saddleNodes):
+    def plotMergeTree(self):
         N = self.D.shape[0]
         implot = plt.imshow(-self.D, interpolation = "none")
         implot.set_cmap('Greys')
         plt.hold(True)
-        for node in minNodes:
+        for node in self.mins:
             plt.scatter(node.j, node.i, 100, 'b')
-        for node in saddleNodes:
+        for node in self.saddles:
             plt.scatter(node.j, node.i, 100, 'g')
             [i1, j1] = [node.i, node.j]
-            for neighb in node.neighbors:
+            for neighb in node.treeNeighbs:
                 [i2, j2] = [neighb.i, neighb.j]
                 plt.plot([j1, j2], [i1, i2], 'r')
     
@@ -267,7 +326,6 @@ class SSMComplex(object):
     def saveOFFMesh(self, fileprefix):
         #First save mesh file
         faces = {}
-        N = self.D.shape[0]
         for n in self.nodes:
             if n == self.borderNode:
                 continue
@@ -275,38 +333,31 @@ class SSMComplex(object):
             for i in range(len(neighbs)):
                 a = neighbs[i]
                 b = neighbs[(i+1)%len(neighbs)]
-                idxs = [getListIndex(n.i, n.j, N), getListIndex(b.i, b.j, N), getListIndex(a.i, a.j, N)]
+                idxs = [n.listIdx, b.listIdx, a.listIdx]
                 while not (idxs[0] < idxs[1] and idxs[0] < idxs[2]):
                     idxs = [idxs[2], idxs[0], idxs[1]]
                 idxs = [idxs[2], idxs[1], idxs[0]]
                 faces["%i:%i:%i"%tuple(idxs)] = idxs
         fout = open("%s.off"%fileprefix, 'w')
-        fout.write("OFF\n%i %i 0\n"%(len(self.nodes), len(faces)))
+        #Don't write out the last node, which is the border node
+        fout.write("OFF\n%i %i 0\n"%(len(self.nodes)-1, len(faces)))
         scale = np.max(self.D)/self.D.shape[0]
-        for i in range(len(self.nodes)):
+        for i in range(len(self.nodes)-1):
             n = self.nodes[i]
             fout.write("%g %g %g\n"%(n.j*scale, n.i*scale, n.d))
         for fstring in faces:
             f = faces[fstring]
             fout.write("3 %i %i %i\n"%tuple(f))
         fout.close()
-        #Now save indices into critical points in the mesh
-        mins = []
-        saddles = []
-        maxes = []
-        for i in range(len(self.nodes)):
-            node = self.nodes[i]
-            if node.index == MorseNode.MIN:
-                mins.append(i)
-            elif node.index == MorseNode.SADDLE:
-                saddles.append(i)
-            elif node.index == MorseNode.MAX:
-                maxes.append(i)
-        sio.savemat("%s.mat"%fileprefix, {'mins':np.array(mins), 'saddles':np.array(saddles), 'maxes':np.array(maxes)})
+        #Now save indices into critical points in the mesh to export to Matlab
+        mins = np.array([m.listIdx for m in self.mins])
+        saddles = np.array([s.listIdx for s in self.saddles])
+        maxes = np.array([m.listIdx for m in self.maxes])
+        sio.savemat("%s.mat"%fileprefix, {'mins':mins, 'saddles':saddles, 'maxes':maxes})
         
 
 if __name__ == '__main__':
-    N = 1000
+    N = 100
     p = 1.68
     thist = 2*np.pi*(np.linspace(0, 1, N)**p)
     ps = np.linspace(0.1, 2, 20)
@@ -318,14 +369,7 @@ if __name__ == '__main__':
     c = SSMComplex(D)
     c.makeMesh()
     print "euler = %i  (nMins = %i, nSaddles = %i, nMaxes = %i)"%c.getEuler()
-#    (minNodes, saddleNodes, I) = c.makeMergeTree()
-#    print I
-#    plt.plot(I[:, 0], I[:, 1], 'r.')
-#    plt.show()
-#    
-#    c.plotMergeTree(minNodes, saddleNodes)
-#    plt.title("p = %g"%p)
-#    plt.show()
     
-    c.plotMesh(False)
+    c.makeMergeTree()
+    c.plotMergeTree()
     plt.show()
