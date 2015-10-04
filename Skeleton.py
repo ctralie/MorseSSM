@@ -142,7 +142,11 @@ class Skeleton(object):
                     thisBone.length = float(fields[1])
                 elif fields[0] == "axis":
                     axis = np.array([float(x) for x in fields[1:4]])
+                    axis = axis*np.pi/180
                     thisBone.axis = axis
+                    #Set up the "C" and "CInv" matrices from the axis
+                    thisBone.C = getRotationMatrix(axis[0], axis[1], axis[2])
+                    thisBone.CInv = thisBone.C.T
                 elif fields[0] == "dof":
                     dof = [(x.lstrip().rstrip()).lower() for x in fields[1:]]
                     for i in range(0, len(dof)):
@@ -176,20 +180,6 @@ class Skeleton(object):
             elif parseState == Skeleton.PARSE_FINISHED:
                 print "Warning: Finished, but got line %s"%line
         fin.close()
-        #Now rotate directions to local coordinate system
-        for bonestr in self.bones:
-            bone = self.bones[bonestr]
-            a = bone.axis
-            if isinstance(a, basestring):
-                #Skip root node
-                continue
-            d = bone.direction
-            a = [thisa*np.pi/180 for thisa in a]
-            print a
-            R = getRotationMatrix(-a[0], -a[1], -a[2])
-            p = np.array([d[0], d[1], d[2], d[1]])
-            p = R.dot(p)
-            #bone.direction = p[0:3]
 
     #Functions for exporting tree to numpy
     def getEdgesRec(self, node, edges, kindex):
@@ -234,11 +224,16 @@ class SkeletonAnimator(object):
     
     #translate then rotate, translate then rotate, ...
     def calcPositions(self, bone, parent, index, matrix):
-        (R, T) = self.boneMatrices[bone.name][index]
-        #Bone is specified in its parent's coordinate system
-        pos = matrix.dot(T[:, 3])
+        (RP, B) = self.boneMatrices[parent.name][index]
+        (M, T) = self.boneMatrices[bone.name][index]
+        C = bone.C
+        CInv = bone.CInv
+        C = np.eye(4)
+        CInv = np.eye(4)
+        L = B.dot(C.dot(M.dot(CInv)))
+        pos = L.dot(T[:, 3])
         self.bonePositions[bone.name][index, :] = pos[0:3].flatten()
-        matrix = matrix.dot(R.dot(T))
+        matrix = matrix.dot(M.dot(T))
         for child in bone.children:
             self.calcPositions(child, bone, index, matrix)
     
@@ -298,7 +293,7 @@ class SkeletonAnimator(object):
             for child in bone.children:
                 self.initMatrices(child, index)
             matrix = rotMatrix.dot(translationMatrix)
-            self.bonePositions['root'][index, :] = matrix[0:3, 3].flatten()
+            self.bonePositions['root'][index, :] = np.array([TX, TY, TZ])
             for child in bone.children:
                 self.calcPositions(child, bone, index, matrix)
         print "Finished initializing"
@@ -357,7 +352,7 @@ if __name__ == '__main__':
     skeleton.initFromFile("13.asf")
     activity = SkeletonAnimator(skeleton)
     activity.initFromFile("13_11.amc")
-    index = 10
+    index = 0
     edges = skeleton.getEdges()
     X = activity.getState(index)
     
@@ -368,4 +363,5 @@ if __name__ == '__main__':
     for i in range(edges.shape[0]):
         e = edges[i, :].flatten()
         plt.plot(X[e, 0], X[e, 1], X[e, 2], 'r')
+    plt.axis('equal')
     plt.show()
