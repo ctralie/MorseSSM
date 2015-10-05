@@ -41,11 +41,12 @@ class MorseNode(object):
         self.listIdx = listIdx
         self.neighbs = []
         self.index = MorseNode.REGULAR
+        self.borderNode = False
         self.signChanges = 0
         self.P = self #Pointer for union find
         self.treeNeighbs = [] #For storing merge tree pairings (TODO: Duplicate this variable for join/split trees)
     
-    def calcIndex(self):
+    def calcIndex(self, N):
         signChanges = 0
         nsigns = [distComparator(n, self) for n in self.neighbs]
         nsigns.append(nsigns[0])
@@ -59,6 +60,19 @@ class MorseNode(object):
                 self.index = MorseNode.MIN
         elif signChanges == 2:
             self.index = MorseNode.REGULAR
+            if self.borderNode:
+                #Check to see if the two border neighbors are the same sign, which
+                #is a special case of a border saddle
+                borderSigns = []
+                for n in self.neighbs:
+                    if n.j == n.i+1 or n.i == 0 or n.j == 0:
+                        borderSigns.append(distComparator(n, self))
+                if len(borderSigns) < 2:
+                    print "Warning: Less than two border neighbors for a border node: i = %i, j = %i"%(self.i, self.j)
+                elif len(borderSigns) > 2:
+                    print "Warning: More than two border neighbors for a border node: i = %i, j = %i"%(self.i, self.j)
+                elif borderSigns[0] == borderSigns[1]:
+                    self.index = MorseNode.SADDLE
         elif signChanges >= 4:
             self.index = MorseNode.SADDLE
         else:
@@ -120,11 +134,15 @@ class SSMComplex(object):
         ns = [[0, -1], [-1, -1], [-1, 0], [-1, 1], [0, 1], [1, 1], [1, 0], [1, -1]]
         for thisNode in self.nodes:
             [i, j] = [thisNode.i, thisNode.j]
+            if j == i+1 or i == 0 or j == 0:
+                thisNode.borderNode = True
             for n in ns:
                 [ni, nj] = [i + n[0], j + n[1]]
                 if nj < ni:
+                    #Don't add symmetric things on the other side of the diagonal
                     continue
                 if nj < 0 or ni < 0 or nj >= N or ni >= N or ni == nj:
+                    #Boundary node
                     continue
                 nidx = getListIndex(ni, nj, N)
                 #Deal with diagonal cases first
@@ -149,7 +167,7 @@ class SSMComplex(object):
         del self.maxes[:]
         del self.saddles[:]
         for n in self.nodes:
-            n.calcIndex()
+            n.calcIndex(N)
             if n.index == MorseNode.MIN:
                 self.mins.append(n)
             elif n.index == MorseNode.MAX:
@@ -167,7 +185,6 @@ class SSMComplex(object):
     def getMergeComponent(self, node, repNodes):
         if node.touched:
             return
-        #print "%i(%s) "%(node.listIdx, MorseNode.TypeStrings[node.index])
         node.touched = True
         #Implicitly do nothing if this is a min since regular points
         #above it connected to it will already have merged to the min
@@ -186,9 +203,6 @@ class SSMComplex(object):
             #saddle from below and record the connections
             components = [UFFind(n).listIdx for n in node.neighbs if distComparator(n, node) == -1]
             components = np.unique(components)
-#            print "Merging nodes:"
-#            for c in components:
-#                print "%i: Type = %s"%(c, MorseNode.TypeStrings[self.nodes[c].index])
             components = [repNodes[self.nodes[i]] for i in components]
             for c in components:
                 c.treeNeighbs.append(node)
@@ -209,8 +223,8 @@ class SSMComplex(object):
         repNodes = {}
         for m in self.mins:
             repNodes[m] = m
-        for s in self.saddles:
-            self.getMergeComponent(s, repNodes)            
+        for m in self.maxes:
+            self.getMergeComponent(m, repNodes)            
             
     
     ###################################################################
