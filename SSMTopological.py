@@ -111,12 +111,6 @@ class SSMComplex(object):
     def makeMesh(self):
         #Num finite edges
         N = self.D.shape[0]
-        #Create a node that connects to all boundary points
-        idx = np.round(N/2)
-        self.borderNode = MorseNode(idx, idx, 0, N*(N-1)/2)
-        self.borderNode.index = MorseNode.MIN
-        #Now add all other nodes (only include upper triangular part
-        #minus the diagonal)
         idx = 0
         for i in range(N):
             for j in range(i+1, N):
@@ -130,13 +124,12 @@ class SSMComplex(object):
                 [ni, nj] = [i + n[0], j + n[1]]
                 if nj < ni:
                     continue
+                if nj < 0 or ni < 0 or nj >= N or ni >= N or ni == nj:
+                    continue
                 nidx = getListIndex(ni, nj, N)
                 #Deal with diagonal cases first
                 if abs(n[0]) == abs(n[1]):
-                    if ni == nj or ni < 0 or nj < 0 or ni >= N or nj >= N:
-                        #Only connect border along straight lines to save space
-                        continue
-                    elif j == i+1 and nj == ni+1:
+                    if j == i+1 and nj == ni+1:
                         #Add diagonals along the border
                         thisNode.neighbs.append(self.nodes[nidx])
                     else:
@@ -149,11 +142,7 @@ class SSMComplex(object):
                         if abs(a.d - b.d) > abs(c.d - d.d):
                             thisNode.neighbs.append(self.nodes[nidx])
                 #Handle the straight line cases
-                else:
-                    if ni == nj or ni < 0 or nj < 0 or ni >= N or nj >= N:
-                        thisNode.neighbs.append(self.borderNode)
-                        self.borderNode.neighbs.append(thisNode)
-                    else:
+                elif not (ni == nj):
                         thisNode.neighbs.append(self.nodes[nidx])
         #Figure out the index of all points (regular/min/max/saddle)
         del self.mins[:]
@@ -167,8 +156,6 @@ class SSMComplex(object):
                 self.maxes.append(n)
             elif n.index == MorseNode.SADDLE:
                 self.saddles.append(n)
-        self.mins.append(self.borderNode)
-        self.nodes.append(self.borderNode)
 
     def getEuler(self):
         nMaxes = len(self.maxes)
@@ -178,7 +165,9 @@ class SSMComplex(object):
 
     #Recursive helper function for making merge tree
     def getMergeComponent(self, node, repNodes):
-        @print "%i(%s) "%(node.listIdx, MorseNode.TypeStrings[node.index])
+        if node.touched:
+            return
+        #print "%i(%s) "%(node.listIdx, MorseNode.TypeStrings[node.index])
         node.touched = True
         #Implicitly do nothing if this is a min since regular points
         #above it connected to it will already have merged to the min
@@ -267,6 +256,8 @@ class SSMComplex(object):
             for neighb in node.treeNeighbs:
                 [i2, j2] = [neighb.i, neighb.j]
                 plt.plot([j1, j2], [i1, i2], 'r')
+        for node in self.maxes:
+            plt.scatter(node.j, node.i, 100, 'r')
     
     #For each critical point in the SSM associated with a curve in X,
     #plot the neighborhoods in X that gave rise to that SSM region
@@ -357,8 +348,8 @@ class SSMComplex(object):
         
 
 if __name__ == '__main__':
-    N = 100
-    p = 1.68
+    N = 200
+    p = 1.8
     thist = 2*np.pi*(np.linspace(0, 1, N)**p)
     ps = np.linspace(0.1, 2, 20)
     X = np.zeros((N, 2))
@@ -372,4 +363,5 @@ if __name__ == '__main__':
     
     c.makeMergeTree()
     c.plotMergeTree()
+    #c.plotMesh(False)
     plt.show()
