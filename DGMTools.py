@@ -9,12 +9,14 @@ import matplotlib.pyplot as plt
 import skimage.draw as skdraw #Used for fast landscape triangle rastering
 import scipy.misc #Used for downsampling rasterized images avoiding aliasing
 import time #For timing kernel comparison
+from munkres import *
+import sklearn.metrics.pairwise
 
 ##############################################################################
 ##########                  Plotting Functions                      ##########    
 ##############################################################################
 
-def plotDGM(dgm):
+def plotDGM(dgm, color = 'b'):
     # Create Lists
     X = list(zip(*dgm)[0]);
     Y = list(zip(*dgm)[1]);
@@ -23,7 +25,7 @@ def plotDGM(dgm):
     axMax = max(max(X),max(Y));
     axRange = axMax-axMin;
     # plot points
-    plt.plot(X, Y,'b.')
+    plt.plot(X, Y,'%s.'%color)
     # plot line
     plt.plot([axMin-axRange/5,axMax+axRange/5], [axMin-axRange/5, axMax+axRange/5],'k');
     # adjust axis
@@ -32,9 +34,65 @@ def plotDGM(dgm):
     plt.xlabel('Time of Birth')
     plt.ylabel('Time of Death')
 
+def plotWassersteinMatching(I1, I2, matchidx):
+    plotDGM(I1, 'b')
+    plt.hold(True)
+    plotDGM(I2, 'r')
+    cp = np.cos(np.pi/4)
+    sp = np.sin(np.pi/4)
+    R = np.array([[cp, -sp], [sp, cp]])
+    I1Rot = I1.dot(R)
+    I2Rot = I2.dot(R)
+    for index in matchidx:
+        (i, j) = index
+        if i >= I1.shape[0] and j >= I2.shape[0]:
+            continue
+        if i >= I1.shape[0]:
+            diagElem = np.array([I2Rot[j, 0], 0])
+            diagElem = diagElem.dot(R.T)
+            plt.plot([I2[j, 0], diagElem[0]], [I2[j, 1], diagElem[1]], 'g')
+        elif j >= I2.shape[0]:
+            diagElem = np.array([I1Rot[i, 0], 0])
+            diagElem = diagElem.dot(R.T)
+            plt.plot([I1[i, 0], diagElem[0]], [I1[i, 1], diagElem[1]], 'g')
+        else:
+            plt.plot([I1[i, 0], I2[j, 0]], [I1[i, 1], I2[j, 1]], 'g')
+
 ##############################################################################
 ##########            Diagram Comparison Functions                  ##########    
 ##############################################################################
+
+def getWassersteinDist(S, T):
+    N = S.shape[0]
+    M = T.shape[0]
+    DUL = sklearn.metrics.pairwise.pairwise_distances(S, T)
+    
+    #Put diagonal elements into the matrix
+    #Rotate the diagrams to make it easy to find the straight line
+    #distance to the diagonal
+    cp = np.cos(np.pi/4)
+    sp = np.sin(np.pi/4)
+    R = np.array([[cp, -sp], [sp, cp]])
+    S = S.dot(R)
+    T = T.dot(R)
+    D = np.zeros((N+M, N+M))
+    D[0:N, 0:M] = DUL
+    UR = np.max(D)*np.ones((N, N))
+    np.fill_diagonal(UR, S[:, 1])
+    D[0:N, M:M+N] = UR
+    UL = np.max(D)*np.ones((M, M))
+    np.fill_diagonal(UL, T[:, 1])
+    D[N:M+N, 0:M] = UL
+    D = D.tolist()
+    
+    #Run the hungarian algorithm
+    m = Munkres()
+    matchidx = m.compute(D)
+    matchdist = 0
+    for pair in matchidx:
+        (i, j) = pair
+        matchdist += D[i][j]
+    return (matchidx, matchdist)
 
 #Do sorting and grabbing with the option to include birth times
 #Zeropadding is also taken into consideration

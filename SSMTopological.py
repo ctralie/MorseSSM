@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import math
 import scipy.io as sio
 from DGMTools import *
-
+from Skeleton import *
 
 #Get index into an upper triangular matrix minus the diagonal
 #which is stored as a row major list
@@ -381,10 +381,27 @@ if __name__ == '__main__':
     X = np.zeros((N, 2))
     X[:, 0] = np.cos(thist)
     X[:, 1] = np.sin(2*thist)
+    
+#    asf = "MOCAP/13.asf"
+#    amc = "MOCAP/13_11.amc"
+#    skeleton = Skeleton()
+#    skeleton.initFromFile(asf)
+#    animator = SkeletonAnimator(skeleton)
+#    X = animator.initFromFileUsingOctave(asf, amc)
+#    print "X.shape = ", X.shape
+#    X = np.reshape(X, (X.shape[0]*X.shape[1], X.shape[2]))
+#    X = X.T
+#    print "X.shape = ", X.shape
+    
     dotX = np.reshape(np.sum(X*X, 1), (X.shape[0], 1))
     D = (dotX + dotX.T) - 2*(np.dot(X, X.T))
     D[D < 0] = 0
     D = np.sqrt(D)
+
+#    D = sio.loadmat('MusicFeatures/beatles.mat')
+#    D = D['D']
+#    D = np.reshape(D[100, :], (200, 200))
+
     c = SSMComplex(D)
     c.makeMesh()
     print "euler = %i  (nMins = %i, nSaddles = %i, nMaxes = %i)"%c.getEuler()
@@ -392,7 +409,21 @@ if __name__ == '__main__':
     plt.subplot(1, 2, 1)
     c.plotJoinTree()
     plt.subplot(1, 2, 2)
-    print c.IJoin
     plotDGM(c.IJoin)
     #c.plotMesh(False)
     plt.show()
+
+if __name__ == '__main__2':
+    T = sio.loadmat('TestDists.mat')
+    D1 = T['D1']
+    D2 = T['D2']
+    c1 = SSMComplex(D1)
+    c1.makeMesh()
+    c2 = SSMComplex(D2)
+    c2.makeMesh()
+    I1 = c1.IJoin
+    I2 = c2.IJoin
+    (matchidx, matchdist) = getWassersteinDist(I1, I2)
+    plotWassersteinMatching(I1, I2, matchidx)
+    plt.show()
+    
