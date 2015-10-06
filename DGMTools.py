@@ -3,7 +3,6 @@
 # Description: Contains methods to plot and compare persistence diagrams
 #               Comparison algorithms include grabbing/sorting, persistence landscapes,
 #               and the "multiscale heat kernel" (CVPR 2015)
-#               Also contains wrappers around SSM computation
 
 import numpy as np
 import matplotlib.pyplot as plt

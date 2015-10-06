@@ -9,25 +9,48 @@ from OpenGL.GLUT import *
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from oct2py import octave
 
-def getRotationMatrix(rx, ry, rz):
+def getRotationX(rx):
     rotX = np.eye(4)
     rotX[1, 1] = np.cos(rx)
     rotX[2, 1] = np.sin(rx)
     rotX[1, 2] = -np.sin(rx)
-    rotX[2, 2] = np.cos(rx)
+    rotX[2, 2] = np.cos(rx)   
+    return rotX
+
+def getRotationY(ry):
     rotY = np.eye(4)
     rotY[0, 0] = np.cos(ry)
     rotY[2, 0] = np.sin(ry)
     rotY[0, 2] = -np.sin(ry)
     rotY[2, 2] = np.cos(ry)
+    return rotY
+
+def getRotationZ(rz):
     rotZ = np.eye(4)
     rotZ[0, 0] = np.cos(rz)
     rotZ[1, 0] = np.sin(rz)
     rotZ[0, 1] = -np.sin(rz)
     rotZ[1, 1] = np.cos(rz)
-    
-    return rotZ.dot(rotY.dot(rotX))
+    return rotZ
+
+#X first, Y second, Z third
+def getRotationXYZ(rx, ry, rz):
+    Rx = getRotationX(rx)
+    Ry = getRotationY(ry)
+    Rz = getRotationZ(rz)
+    return Rz.dot(Ry.dot(Rx))    
+
+#Rotation from this bone local coordinate system to the coordinate
+#system of its parent
+def computeRotationParentChild(parent, child):
+    R1 = getRotationXYZ(parent.axis[0], parent.axis[1], parent.axis[2])
+    R1 = R1.T
+    R2 = getRotationXYZ(child.axis[0], child.axis[1], child.axis[2])
+    R = R1.dot(R2)
+    child.rotParentCurrent = R.T
+
 
 class SkeletonRoot(object):
     def __init__(self):
@@ -43,7 +66,7 @@ class SkeletonRoot(object):
     def finishInit(self):
         #Precompute Rotation matrix
         angles = [float(a)*np.pi/180.0 for a in self.orientation]
-        self.initialRotMatrix = getRotationMatrix(angles[0], angles[1], angles[2])
+        self.initialRotMatrix = getRotationXYZ(angles[0], angles[1], angles[2])
 
 class SkeletonBone(object):
     def __init__(self):
@@ -144,9 +167,6 @@ class Skeleton(object):
                     axis = np.array([float(x) for x in fields[1:4]])
                     axis = axis*np.pi/180
                     thisBone.axis = axis
-                    #Set up the "C" and "CInv" matrices from the axis
-                    thisBone.C = getRotationMatrix(axis[0], axis[1], axis[2])
-                    thisBone.CInv = thisBone.C.T
                 elif fields[0] == "dof":
                     dof = [(x.lstrip().rstrip()).lower() for x in fields[1:]]
                     for i in range(0, len(dof)):
@@ -180,6 +200,25 @@ class Skeleton(object):
             elif parseState == Skeleton.PARSE_FINISHED:
                 print "Warning: Finished, but got line %s"%line
         fin.close()
+        
+        #Rotate bone dir to local coordinate system
+        for bstr in self.bones:
+            if bstr == 'root':
+                continue
+            bone = self.bones[bstr]
+            #TODO: It seems like I should be rotating the other way
+            R = getRotationXYZ(bone.axis[0], bone.axis[1], bone.axis[2])
+            d = bone.direction
+            d = R.dot(np.array([d[0], d[1], d[2], 1]))
+            bone.direction = d[0:3]
+        
+        self.bones['root'].axis = np.array([0, 0, 0])
+        #Compute rotation to parent coordinate system
+        self.root.rotParentCurrent = np.eye(4)
+        for bstr in self.bones:
+            bone = self.bones[bstr]
+            for c in bone.children:
+                computeRotationParentChild(bone, c)
 
     #Functions for exporting tree to numpy
     def getEdgesRec(self, node, edges, kindex):
@@ -214,28 +253,23 @@ class SkeletonAnimator(object):
             ry = self.bonesStates[bone.name][index][bone.dof["ry"]]*np.pi/180
         if "rz" in bone.dof:
             rz = self.bonesStates[bone.name][index][bone.dof["rz"]]*np.pi/180
-        rotMatrix = getRotationMatrix(rx, ry, rz)
-        pos = bone.length*bone.direction
-        translationMatrix = np.eye(4)
-        translationMatrix[0:3, 3] = pos
-        self.boneMatrices[bone.name].append((rotMatrix, translationMatrix))
+        rotMatrix = getRotationXYZ(rx, ry, rz)
+        self.boneMatrices[bone.name].append(rotMatrix)
         for child in bone.children:
             self.initMatrices(child, index)
     
     #translate then rotate, translate then rotate, ...
-    def calcPositions(self, bone, parent, index, matrix):
-        (RP, B) = self.boneMatrices[parent.name][index]
-        (M, T) = self.boneMatrices[bone.name][index]
-        C = bone.C
-        CInv = bone.CInv
-        C = np.eye(4)
-        CInv = np.eye(4)
-        L = B.dot(C.dot(M.dot(CInv)))
-        pos = L.dot(T[:, 3])
-        self.bonePositions[bone.name][index, :] = pos[0:3].flatten()
-        matrix = matrix.dot(M.dot(T))
+    def calcPositions(self, bone, index, matrix):
+        matrix = matrix.dot(bone.rotParentCurrent)
+        R = self.boneMatrices[bone.name][index]
+        matrix = matrix.dot(R)
+        t = bone.length*bone.direction
+        T = np.eye(4)
+        T[0:3, 3] = t
+        matrix = matrix.dot(T)
+        self.bonePositions[bone.name][index, :] = matrix[0:3, 3].flatten()
         for child in bone.children:
-            self.calcPositions(child, bone, index, matrix)
+            self.calcPositions(child, index, matrix)
     
     def initFromFile(self, filename):
         print "Initializing..."
@@ -288,19 +322,29 @@ class SkeletonAnimator(object):
                 rotorder["RZ"] = rotorder["RZ"] - 3
             translationMatrix = np.eye(4)
             translationMatrix[0:3, 3] = np.array([TX, TY, TZ])
-            rotMatrix = getRotationMatrix(RX, RY, RZ)
+            rotMatrix = getRotationXYZ(RX, RY, RZ)
             self.boneMatrices['root'].append((rotMatrix, translationMatrix))
             for child in bone.children:
                 self.initMatrices(child, index)
             matrix = rotMatrix.dot(translationMatrix)
-            self.bonePositions['root'][index, :] = np.array([TX, TY, TZ])
+            self.bonePositions['root'][index, :] = matrix[0:3, 3]
             for child in bone.children:
-                self.calcPositions(child, bone, index, matrix)
+                self.calcPositions(child, index, matrix)
         print "Finished initializing"
+    
+    def initFromFileUsingOctave(self, asf, amc):
+        #Use the help of some external code for now
+        [X, boneNames] = octave.getMOCAPTrajectories(asf, amc)
+        for i in range(len(boneNames)):
+            x = X[:, i, :]
+            self.bonePositions[boneNames[i]] = x.T
+        self.NStates = X.shape[2]
+        return X
     
     def renderNode(self, bone, parent, index):
         if index >= self.NStates:
             return
+            
         #Endpoint are always matrix[0:3, 3]
         P1 = self.bonePositions[parent.name][index, :]
         P2 = self.bonePositions[bone.name][index, :]

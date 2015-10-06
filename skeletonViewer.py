@@ -139,6 +139,7 @@ class SkeletonViewerCanvas(glcanvas.GLCanvas):
             if self.animationState >= self.animator.NStates:
                 self.animationState = self.animator.NStates - 1
                 self.animating = False
+            #saveImageGL(self, "%i.png"%self.animationState)
             self.Refresh()
         
         self.SwapBuffers()
@@ -200,6 +201,8 @@ class SkeletonViewerFrame(wx.Frame):
         self.size = size
         self.pos = pos
         
+        self.asffilename = ''
+        
         filemenu = wx.Menu()
         menuOpenASF = filemenu.Append(SkeletonViewerFrame.ID_LOADSKELETON_ASF, "&Load ASF File","Load ASF File")
         self.Bind(wx.EVT_MENU, self.OnLoadASFFile, menuOpenASF)
@@ -242,6 +245,7 @@ class SkeletonViewerFrame(wx.Frame):
             filename = dlg.GetFilename()
             dirname = dlg.GetDirectory()
             filepath = os.path.join(dirname, filename)
+            self.asffilename = filepath
             self.glcanvas.skeleton = Skeleton()
             self.glcanvas.skeleton.initFromFile(filepath)
             self.glcanvas.Refresh()
@@ -254,8 +258,10 @@ class SkeletonViewerFrame(wx.Frame):
             filename = dlg.GetFilename()
             dirname = dlg.GetDirectory()
             filepath = os.path.join(dirname, filename)
+            print filepath
             self.glcanvas.animator = SkeletonAnimator(self.glcanvas.skeleton)
-            self.glcanvas.animator.initFromFile(filepath)
+            #self.glcanvas.animator.initFromFile(filepath)
+            self.glcanvas.animator.initFromFileUsingOctave(self.asffilename, filepath)
             self.glcanvas.Refresh()
         dlg.Destroy()
         self.glcanvas.bbox = self.glcanvas.animator.getBBox()
