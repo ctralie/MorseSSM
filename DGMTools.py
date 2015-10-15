@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import skimage.draw as skdraw #Used for fast landscape triangle rastering
 import scipy.misc #Used for downsampling rasterized images avoiding aliasing
 import time #For timing kernel comparison
-from munkres import *
+import hungarian #Requires having compiled the library
 import sklearn.metrics.pairwise
 
 ##############################################################################
@@ -86,13 +86,14 @@ def getWassersteinDist(S, T):
     D = D.tolist()
     
     #Run the hungarian algorithm
-    m = Munkres()
-    matchidx = m.compute(D)
+    matchidx = hungarian.lap(D)[0]
+    matchidx = [(i, matchidx[i]) for i in range(len(matchidx))]
     matchdist = 0
     for pair in matchidx:
         (i, j) = pair
         matchdist += D[i][j]
-    return (matchidx, matchdist)
+   
+    return (matchidx, matchdist, D)
 
 #Do sorting and grabbing with the option to include birth times
 #Zeropadding is also taken into consideration

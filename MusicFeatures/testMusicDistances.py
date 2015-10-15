@@ -11,11 +11,12 @@ octave.addpath('../') #Needed to use SSM and CSM
 
 def getRowDists(args):
     (dgm1, dgm2, dgm3, dgm4) = args
-    ret = getWassersteinDist(dgm1, dgm2)[1]
-    ret += getWassersteinDist(dgm3, dgm4)[1]
-    sys.stdout.write(".")
-    sys.stdout.flush()
-    return ret
+    (matchidx, dist, D) = getWassersteinDist(dgm1, dgm2)
+    #Reflect dgm3 and dgm4 across the diagonal
+    dist += getWassersteinDist(dgm3[:, [1, 0]], dgm4[:, [1, 0]])[1]
+    #sys.stdout.write(".")
+    #sys.stdout.flush()
+    return dist
 
 if __name__ == '__main__':
     Ds1 = sio.loadmat('Ds1.mat')
@@ -64,7 +65,6 @@ if __name__ == '__main__':
     parpool = Pool(processes = 8)
     for i in range(CSM2.shape[0]):
         print "Comparing diagram set %i of %i..."%(i, CSM2.shape[0])
-        #X1s = parpool.map(getBlockFeatures, Z)
         Z = zip([IsJoin1[i]]*CSM2.shape[1], IsJoin2, [IsSplit1[i]]*CSM2.shape[1], IsSplit2)
         CSM2[i, :] = np.array(parpool.map(getRowDists, Z))
         sio.savemat("CSM2.mat", {"CSM2":CSM2})
