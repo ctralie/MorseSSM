@@ -85,8 +85,9 @@ class SSMComplex(object):
         #Reset union find structure
         for n in self.nodes:
             n.P = n
-        #Persistence diagram
+        #Persistence diagram and associated generators
         I = []
+        IGens = []
         #At first all of the mins/maxes represent themselves, but eventually
         #they can be represented by saddles
         repNodes = {}
@@ -135,8 +136,9 @@ class SSMComplex(object):
                         node.splitNeighbs.append(c)
                 #Figure out which components die and add entries for them
                 #into the persistence diagram
-                times = np.array([UFFind(c).addtime for c in components])
-                dists = np.array([UFFind(c).d for c in components])
+                criticalNodes = [UFFind(c) for c in components]
+                times = np.array([c.addtime for c in criticalNodes])
+                dists = np.array([c.d for c in criticalNodes])
                 if SweepUp:
                     persistClass = np.argmin(times)
                 else:
@@ -144,13 +146,14 @@ class SSMComplex(object):
                 for k in range(len(components)):
                     if not k == persistClass:
                         I.append([dists[k], node.d])
+                        IGens.append(criticalNodes[k])
                 #Now merge the components to the saddle
                 for c in components:
                     UFUnion(c, node, SweepUp)
                 #Update the representative of this class to be the saddle now
                 u = UFFind(node)
                 repNodes[u] = node
-        return np.array(I)
+        return (np.array(I), IGens)
         
     #Compute the merge tree
     def makeMergeTree(self):
@@ -161,10 +164,10 @@ class SSMComplex(object):
         for i in range(len(self.order)):
             self.nodes[self.order[i]].addtime = i
         #Make the join tree
-        IJoin = self.makeMergeTreeHelper(True)
+        (IJoin, IJoinGens) = self.makeMergeTreeHelper(True)
         #Make the split tree
-        ISplit = self.makeMergeTreeHelper(False)
-        return (ISplit, IJoin)
+        (ISplit, ISplitGens) = self.makeMergeTreeHelper(False)
+        return (ISplit, ISplitGens, IJoin, IJoinGens)
     
     #Create all of the vertices and edges between them on the upper triangular
     #part of the mesh minus the diagonal.  Once this is done, classify each
@@ -214,7 +217,7 @@ class SSMComplex(object):
         del self.mins[:]
         del self.maxes[:]
         del self.saddles[:]
-        (self.ISplit, self.IJoin) = self.makeMergeTree()
+        (self.ISplit, self.ISplitGens, self.IJoin, self.IJoinGens) = self.makeMergeTree()
 
     def getEuler(self):
         nMaxes = len(self.maxes)
@@ -373,7 +376,7 @@ class SSMComplex(object):
         sio.savemat("%s.mat"%fileprefix, {'mins':mins, 'saddles':saddles, 'maxes':maxes})
         
 
-if __name__ == '__main__':
+if __name__ == '__main__2':
     N = 200
     p = 1.8
     thist = 2*np.pi*(np.linspace(0, 1, N)**p)
@@ -413,7 +416,7 @@ if __name__ == '__main__':
     #c.plotMesh(False)
     plt.show()
 
-if __name__ == '__main__2':
+if __name__ == '__main__3':
     T = sio.loadmat('TestDists.mat')
     D1 = T['D1']
     D2 = T['D2']
@@ -426,4 +429,35 @@ if __name__ == '__main__2':
     (matchidx, matchdist) = getWassersteinDist(I1, I2)
     plotWassersteinMatching(I1, I2, matchidx)
     plt.show()
+    
+if __name__ == '__main__':
+    N = 200
+    p = 1.8
+    thist = 2*np.pi*(np.linspace(0, 1, N)**p)
+    ps = np.linspace(0.1, 2, 20)
+    X = np.zeros((N, 2))
+    X[:, 0] = np.cos(thist)
+    X[:, 1] = np.sin(2*thist)
+    
+    dotX = np.reshape(np.sum(X*X, 1), (X.shape[0], 1))
+    D = (dotX + dotX.T) - 2*(np.dot(X, X.T))
+    D[D < 0] = 0
+    D = np.sqrt(D)
+    c1 = SSMComplex(D)
+    c1.makeMesh()
+    
+    I1 = c1.ISplit
+    I1Gens = c1.ISplitGens
+    for i in range(I1.shape[0]):
+        plt.clf()
+        plt.subplot(1, 2, 1)
+        plotDGM(I1)
+        plt.hold(True)
+        plt.scatter(I1[i, 0], I1[i, 1], 20, 'k')
+        plt.subplot(1, 2, 2)
+        c1.plotMesh(False)
+        plt.hold(True)
+        node = I1Gens[i]
+        plt.scatter(node.j, node.i, 200, 'k', 'x')
+        plt.savefig("%i.png"%i)
     
