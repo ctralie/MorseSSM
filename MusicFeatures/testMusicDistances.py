@@ -13,7 +13,11 @@ def getRowDists(args):
     (dgm1, dgm2, dgm3, dgm4) = args
     (matchidx, dist, D) = getWassersteinDist(dgm1, dgm2)
     #Reflect dgm3 and dgm4 across the diagonal
-    dist += getWassersteinDist(dgm3[:, [1, 0]], dgm4[:, [1, 0]])[1]
+    if dgm3.size > 0:
+        dgm3 = dgm3[:, [1, 0]]
+    if dgm4.size > 0:
+        dgm4 = dgm4[:, [1, 0]]
+    dist += getWassersteinDist(dgm3, dgm4)[1]
     #sys.stdout.write(".")
     #sys.stdout.flush()
     return dist
@@ -31,9 +35,10 @@ if __name__ == '__main__':
     dim = int(np.sqrt(Ds1.shape[1]))
     if not os.path.isfile("Is1.mat"):
         for i in range(Ds1.shape[0]):
-            print "Computing %i of %i for SSMs1"%(i, Ds1.shape[0])
+            print "Computing %i of %i for SSMs1"%(i, Ds1.shape[0]),
             c = SSMComplex(np.reshape(Ds1[i, :], [dim, dim]))
             c.makeMesh()
+            print ", euler = %i (%i mins, %i saddles, %i maxes)"%c.getEuler()
             IsJoin1.append(c.IJoin)
             IsSplit1.append(c.ISplit)
         sio.savemat("Is1.mat", {"IsJoin1":IsJoin1, "IsSplit1":IsSplit1})
@@ -48,9 +53,10 @@ if __name__ == '__main__':
     dim = int(np.sqrt(Ds2.shape[1]))
     if not os.path.isfile("Is2.mat"):
         for i in range(Ds2.shape[0]):
-            print "Computing %i of %i for SSMs2"%(i, Ds2.shape[0])
+            print "Computing %i of %i for SSMs2"%(i, Ds2.shape[0]),
             c = SSMComplex(np.reshape(Ds2[i, :], [dim, dim]))
             c.makeMesh()
+            print ", euler = %i (%i mins, %i saddles, %i maxes)"%c.getEuler()
             IsJoin2.append(c.IJoin)
             IsSplit2.append(c.ISplit)
         sio.savemat("Is2.mat", {"IsJoin2":IsJoin2, "IsSplit2":IsSplit2})

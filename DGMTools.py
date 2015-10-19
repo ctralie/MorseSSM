@@ -65,6 +65,13 @@ def plotWassersteinMatching(I1, I2, matchidx):
 def getWassersteinDist(S, T):
     N = S.shape[0]
     M = T.shape[0]
+    #Handle the cases where there are no points in the diagrams
+    if N == 0:
+        S = np.array([[0, 0]])
+        N = 1
+    if M == 0:
+        T = np.array([[0, 0]])
+        M = 1
     DUL = sklearn.metrics.pairwise.pairwise_distances(S, T)
     
     #Put diagonal elements into the matrix

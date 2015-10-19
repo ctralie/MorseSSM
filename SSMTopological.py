@@ -69,7 +69,6 @@ class SSMComplex(object):
             return
         self.D = D
         self.nodes = []
-        self.borderNode = None #Store diagonal/boundary node separately
         self.mins = []
         self.maxes = []
         self.saddles = []
@@ -77,6 +76,22 @@ class SSMComplex(object):
     ###################################################################
     ##              TOPOLOGICAL STRUCTURE ALGORITHMS                 ##
     ###################################################################
+    def getFaces(self):
+        faces = {}
+        for n in self.nodes:
+            neighbs = [ne for ne in n.neighbs]
+            for i in range(len(neighbs)):
+                a = neighbs[i]
+                b = neighbs[(i+1)%len(neighbs)]
+                if n.borderNode and a.borderNode and b.borderNode:
+                    #Skip degenerate triangles at the border
+                    continue
+                idxs = [n.listIdx, b.listIdx, a.listIdx]
+                while not (idxs[0] < idxs[1] and idxs[0] < idxs[2]):
+                    idxs = [idxs[2], idxs[0], idxs[1]]
+                idxs = [idxs[2], idxs[1], idxs[0]]
+                faces["%i:%i:%i"%tuple(idxs)] = idxs
+        self.meshFacesIdx = np.array([faces[f] for f in faces])
 
     #A helper function that makes a merge tree in one direction, either sweeping
     #up or sweeping down.  Store the merge tree connections implicitly in the 
@@ -184,7 +199,7 @@ class SSMComplex(object):
         ns = [[0, -1], [-1, -1], [-1, 0], [-1, 1], [0, 1], [1, 1], [1, 0], [1, -1]]
         for thisNode in self.nodes:
             [i, j] = [thisNode.i, thisNode.j]
-            if j == i+1 or i == 0 or j == 0:
+            if j == i+1 or i == 0 or j == 0 or i == N-1 or j == N-1:
                 thisNode.borderNode = True
             for n in ns:
                 [ni, nj] = [i + n[0], j + n[1]]
@@ -218,6 +233,7 @@ class SSMComplex(object):
         del self.maxes[:]
         del self.saddles[:]
         (self.ISplit, self.ISplitGens, self.IJoin, self.IJoinGens) = self.makeMergeTree()
+        self.getFaces()
 
     def getEuler(self):
         nMaxes = len(self.maxes)
@@ -342,32 +358,20 @@ class SSMComplex(object):
         
     ###################################################################
     ##                       I/O FUNCTIONS                           ##
-    ###################################################################
+    ###################################################################    
     def saveOFFMesh(self, fileprefix):
         #First save mesh file
-        faces = {}
-        for n in self.nodes:
-            if n == self.borderNode:
-                continue
-            neighbs = [ne for ne in n.neighbs if not (ne == self.borderNode)]
-            for i in range(len(neighbs)):
-                a = neighbs[i]
-                b = neighbs[(i+1)%len(neighbs)]
-                idxs = [n.listIdx, b.listIdx, a.listIdx]
-                while not (idxs[0] < idxs[1] and idxs[0] < idxs[2]):
-                    idxs = [idxs[2], idxs[0], idxs[1]]
-                idxs = [idxs[2], idxs[1], idxs[0]]
-                faces["%i:%i:%i"%tuple(idxs)] = idxs
+        if self.meshFacesIdx.size == 0:
+            self.getFaces()
         fout = open("%s.off"%fileprefix, 'w')
         #Don't write out the last node, which is the border node
-        fout.write("OFF\n%i %i 0\n"%(len(self.nodes)-1, len(faces)))
+        fout.write("OFF\n%i %i 0\n"%(len(self.nodes), self.meshFacesIdx.shape[0]))
         scale = np.max(self.D)/self.D.shape[0]
-        for i in range(len(self.nodes)-1):
+        for i in range(len(self.nodes)):
             n = self.nodes[i]
             fout.write("%g %g %g\n"%(n.j*scale, n.i*scale, n.d))
-        for fstring in faces:
-            f = faces[fstring]
-            fout.write("3 %i %i %i\n"%tuple(f))
+        for i in range(self.meshFacesIdx.shape[0]):
+            fout.write("3 %i %i %i\n"%tuple(self.meshFacesIdx[i]))
         fout.close()
         #Now save indices into critical points in the mesh to export to Matlab
         mins = np.array([m.listIdx for m in self.mins])
@@ -445,6 +449,8 @@ if __name__ == '__main__':
     D = np.sqrt(D)
     c1 = SSMComplex(D)
     c1.makeMesh()
+    
+    c1.saveOFFMesh("Figure8")
     
     I1 = c1.ISplit
     I1Gens = c1.ISplitGens
