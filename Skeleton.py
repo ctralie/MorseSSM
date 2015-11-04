@@ -348,16 +348,17 @@ class SkeletonAnimator(object):
         #Endpoint are always matrix[0:3, 3]
         P1 = self.bonePositions[parent.name][index, :]
         P2 = self.bonePositions[bone.name][index, :]
-        colors = [ [1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0], [1, 0, 1], [0, 1, 1] ]
+        #colors = [ [1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0], [1, 0, 1], [0, 1, 1] ]
+        colors = [ [0.67, 0.223, 0.223], [0.44, 0.678, 0.278] ]
         C = colors[bone.id%len(colors)]
         glColor3f(C[0], C[1], C[2])
         
         glPushMatrix()
         glTranslatef(P1[0], P1[1], P1[2])
-        glutSolidSphere(0.2,20,20)
+        glutSolidSphere(0.8,20,20)
         glPopMatrix()
         
-        glLineWidth(2)
+        glLineWidth(6)
         glBegin(GL_LINES)
         glVertex3f(P1[0], P1[1], P1[2])
         glVertex3f(P2[0], P2[1], P2[2])

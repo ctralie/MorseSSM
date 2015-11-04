@@ -9,6 +9,8 @@ from DGMTools import *
 from multiprocessing import Pool
 octave.addpath('../') #Needed to use SSM and CSM
 
+PERSTHRESH = 0.025
+
 def getRowDists(args):
     (dgm1, dgm2, dgm3, dgm4) = args
     (matchidx, dist, D) = getWassersteinDist(dgm1, dgm2)

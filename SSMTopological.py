@@ -21,6 +21,10 @@ def lexographicLess(n1, n2):
         return True
     return False
 
+#Given a bunch of persistence points, 
+def getXYOrder(IGens):
+    print "TODO"
+
 class MorseNode(object):
     (REGULAR, MIN, SADDLE, MAX, UNKNOWN) = (-1, 0, 1, 2, 3)
     TypeStrings = {REGULAR:'REGULAR', MIN:'MIN', SADDLE:'SADDLE', MAX:'MAX', UNKNOWN:'UNKNOWN'}
@@ -30,6 +34,7 @@ class MorseNode(object):
         self.d = d
         self.listIdx = listIdx
         self.neighbs = []
+        self.faces = []
         self.index = MorseNode.REGULAR
         self.borderNode = False
         self.addtime = -1
@@ -37,6 +42,32 @@ class MorseNode(object):
         #The two lists below are for storing merge tree pairings
         self.joinNeighbs = [] #Merge tree up
         self.splitNeighbs = [] #Merge tree down
+    
+    def isNeighborOf(self, other):
+        for n in self.neighbs:
+            if n == other:
+                return True
+        return False
+
+#Check all pairwise edges
+def isTriangle(n1, n2, n3):
+    if n1.isNeighborOf(n2) and n2.isNeighborOf(n3) and n3.isNeighborOf(n1):
+        return True
+    return False
+
+class MeshFace(object):
+    def __init__(self, nodes):
+        self.nodes = nodes
+    
+    #Return the 3D coordinates of each vertex in this face
+    #in each row of the return value
+    def getVerts(self):
+        N = len(self.nodes)
+        ret = np.zeros((N, 3))
+        for i in range(N):
+            n = self.nodes[i]
+            ret[i, :] = [n.i, n.j, n.d]
+        return ret
 
 #Union find "find" with path compression
 def UFFind(u):
@@ -76,22 +107,31 @@ class SSMComplex(object):
     ###################################################################
     ##              TOPOLOGICAL STRUCTURE ALGORITHMS                 ##
     ###################################################################
-    def getFaces(self):
-        faces = {}
-        for n in self.nodes:
-            neighbs = [ne for ne in n.neighbs]
-            for i in range(len(neighbs)):
-                a = neighbs[i]
-                b = neighbs[(i+1)%len(neighbs)]
-                if n.borderNode and a.borderNode and b.borderNode:
-                    #Skip degenerate triangles at the border
-                    continue
-                idxs = [n.listIdx, b.listIdx, a.listIdx]
-                while not (idxs[0] < idxs[1] and idxs[0] < idxs[2]):
-                    idxs = [idxs[2], idxs[0], idxs[1]]
-                idxs = [idxs[2], idxs[1], idxs[0]]
-                faces["%i:%i:%i"%tuple(idxs)] = idxs
-        self.meshFacesIdx = np.array([faces[f] for f in faces])
+    def makeFaces(self):
+        self.faces = []
+        N = self.D.shape[0]
+        for i in range(0, N-2):
+            for j in range(i+1, N-1):
+                n1 = self.nodes[getListIndex(i, j, N)]
+                n2 = self.nodes[getListIndex(i, j+1, N)]
+                n3 = self.nodes[getListIndex(i+1, j+1, N)]
+                if j == i+1:
+                    #Border node
+                    if isTriangle(n1, n2, n3):
+                        self.faces.append(MeshFace([n1, n3, n2]))
+                else:
+                    n4 = self.nodes[getListIndex(i+1, j, N)]
+                    #Check both possible diagonal directions in quad
+                    if n1.isNeighborOf(n3):
+                        if n1.isNeighborOf(n2) and n2.isNeighborOf(n3):
+                            self.faces.append(MeshFace([n1, n3, n2]))
+                        if n1.isNeighborOf(n4) and n4.isNeighborOf(n3):
+                            self.faces.append(MeshFace([n1, n4, n3]))
+                    else:
+                        if n1.isNeighborOf(n4) and n1.isNeighborOf(n2):
+                            self.faces.append(MeshFace([n1, n4, n2]))
+                        if n4.isNeighborOf(n3) and n3.isNeighborOf(n2):
+                            self.faces.append(MeshFace([n4, n3, n2]))
 
     #A helper function that makes a merge tree in one direction, either sweeping
     #up or sweeping down.  Store the merge tree connections implicitly in the 
@@ -233,25 +273,57 @@ class SSMComplex(object):
         del self.maxes[:]
         del self.saddles[:]
         (self.ISplit, self.ISplitGens, self.IJoin, self.IJoinGens) = self.makeMergeTree()
-        self.getFaces()
+        self.makeFaces()
 
     def getEuler(self):
         nMaxes = len(self.maxes)
         nMins = len(self.mins)
         nSaddles = len(self.saddles)
-        return (nMins - nSaddles + nMaxes, nMins, nSaddles, nMaxes)           
-            
+        return (nMins - nSaddles + nMaxes, nMins, nSaddles, nMaxes)
+        
+    def persistenceCleanup(self, thresh, doJoinTree = True, doSplitTree = True):
+        #TODO: Clean up dangling saddles
+        if doJoinTree:
+            toKeep = np.ones(self.IJoin.shape[0], dtype='bool')
+            for i in range(self.IJoin.shape[0]):
+                if self.IJoin[i, 1] - self.IJoin[i, 0] < thresh:
+                    #This is below the persistence threshold
+                    toKeep[i] = 0
+                    #Remove it from the tree
+                    node = self.IJoinGens[i]
+                    saddle = node.joinNeighbs[0]
+                    node.joinNeighbs = []
+                    saddle.joinNeighbs = [n for n in saddle.joinNeighbs if not (n == node)]
+            self.IJoin = self.IJoin[toKeep, :]
+        if doSplitTree:
+            toKeep = np.ones(self.ISplit.shape[0], dtype='bool')
+            for i in range(self.ISplit.shape[0]):
+                if self.ISplit[i, 0] - self.ISplit[i, 1] < thresh:
+                    #This is below the persistence threshold
+                    toKeep[i] = 0
+                    #Remove it from the tree
+                    node = self.ISplitGens[i]
+                    saddle = node.splitNeighbs[0]
+                    node.splitNeighbs = []
+                    saddle.splitNeighbs = [n for n in saddle.splitNeighbs if not (n == node)]
+            self.ISplit = self.ISplit[toKeep, :]
+                    
     
     ###################################################################
     ##                    PLOTTING FUNCTIONS                         ##
     ###################################################################
-    def plotCriticalPoints(self):
-        for node in self.mins:
-            plt.scatter(node.j, node.i, 100, 'b')
-        for node in self.maxes:
-            plt.scatter(node.j, node.i, 100, 'r')
-        for node in self.saddles:
-            plt.scatter(node.j, node.i, 100, 'g')
+    def plotCriticalPoints(self, doMins = True, doMaxes = True, doSaddles = True):
+        if doMins:
+            for node in self.mins:
+                if len(node.joinNeighbs) > 0:
+                    plt.scatter(node.j, node.i, 100, 'b')
+        if doMaxes:
+            for node in self.maxes:
+                if len(node.splitNeighbs) > 0:
+                    plt.scatter(node.j, node.i, 100, 'r')
+        if doSaddles:
+            for node in self.saddles:
+                plt.scatter(node.j, node.i, 100, 'g')
          
     def plotMesh(self, drawEdges = True):
         N = self.D.shape[0]
@@ -270,7 +342,6 @@ class SSMComplex(object):
                         elif j1 == N-1:
                             [i2, j2] = [i1, j1+1]
                     plt.plot([j1, j2], [i1, i2], 'r')
-        self.plotCriticalPoints()
     
     def plotJoinTree(self):
         N = self.D.shape[0]
@@ -278,9 +349,11 @@ class SSMComplex(object):
         implot.set_cmap('Greys')
         plt.hold(True)
         for node in self.mins:
-            plt.scatter(node.j, node.i, 100, 'b')
+            if len(node.joinNeighbs) > 0:
+                plt.scatter(node.j, node.i, 100, 'b')
         for node in self.saddles:
-            plt.scatter(node.j, node.i, 100, 'g')
+            if len(node.joinNeighbs) > 0:
+                plt.scatter(node.j, node.i, 100, 'g')
             [i1, j1] = [node.i, node.j]
             for neighb in node.joinNeighbs:
                 [i2, j2] = [neighb.i, neighb.j]
@@ -294,9 +367,11 @@ class SSMComplex(object):
         implot.set_cmap('Greys')
         plt.hold(True)
         for node in self.maxes:
-            plt.scatter(node.j, node.i, 100, 'r')
+            if len(node.splitNeighbs) > 0:
+                plt.scatter(node.j, node.i, 100, 'r')
         for node in self.saddles:
-            plt.scatter(node.j, node.i, 100, 'g')
+            if len(node.splitNeigbhs) > 0:
+                plt.scatter(node.j, node.i, 100, 'g')
             [i1, j1] = [node.i, node.j]
             for neighb in node.splitNeighbs:
                 [i2, j2] = [neighb.i, neighb.j]
@@ -361,23 +436,27 @@ class SSMComplex(object):
     ###################################################################    
     def saveOFFMesh(self, fileprefix):
         #First save mesh file
-        if self.meshFacesIdx.size == 0:
-            self.getFaces()
         fout = open("%s.off"%fileprefix, 'w')
         #Don't write out the last node, which is the border node
-        fout.write("OFF\n%i %i 0\n"%(len(self.nodes), self.meshFacesIdx.shape[0]))
+        fout.write("OFF\n%i %i 0\n"%(len(self.nodes), len(self.faces)))
         scale = np.max(self.D)/self.D.shape[0]
         for i in range(len(self.nodes)):
             n = self.nodes[i]
-            fout.write("%g %g %g\n"%(n.j*scale, n.i*scale, n.d))
-        for i in range(self.meshFacesIdx.shape[0]):
-            fout.write("3 %i %i %i\n"%tuple(self.meshFacesIdx[i]))
+            fout.write("%g %g %g\n"%(n.i*scale, n.j*scale, n.d))
+        for f in self.faces:
+            fidx = [n.listIdx for n in f.nodes]
+            fout.write("%i "%len(fidx))
+            fmtstr = "%i "*len(fidx) + "\n"
+            fout.write(fmtstr%tuple(fidx))
         fout.close()
         #Now save indices into critical points in the mesh to export to Matlab
         mins = np.array([m.listIdx for m in self.mins])
+        minscoords = np.array([[m.i, m.j] for m in self.mins])
         saddles = np.array([s.listIdx for s in self.saddles])
+        saddlescoords = np.array([[s.i, s.j] for s in self.saddles])
         maxes = np.array([m.listIdx for m in self.maxes])
-        sio.savemat("%s.mat"%fileprefix, {'mins':mins, 'saddles':saddles, 'maxes':maxes})
+        maxescoords = np.array([[m.i, m.j] for m in self.maxes])
+        sio.savemat("%s.mat"%fileprefix, {'mins':mins, 'minscoords':minscoords, 'saddles':saddles, 'saddlescoords':saddlescoords, 'maxes':maxes, 'maxescoords':maxescoords, 'D':self.D})
         
 
 if __name__ == '__main__2':
@@ -405,20 +484,28 @@ if __name__ == '__main__2':
     D[D < 0] = 0
     D = np.sqrt(D)
 
-#    D = sio.loadmat('MusicFeatures/beatles.mat')
-#    D = D['D']
-#    D = np.reshape(D[100, :], (200, 200))
+    D = sio.loadmat('MusicFeatures/Ds1.mat')
+    D = D['D']
+    D = np.reshape(D[100, :], (200, 200))
 
     c = SSMComplex(D)
     c.makeMesh()
     print "euler = %i  (nMins = %i, nSaddles = %i, nMaxes = %i)"%c.getEuler()
     
     plt.subplot(1, 2, 1)
-    c.plotJoinTree()
+    c.plotMesh(False)
+    plt.hold(True)
+    c.plotCriticalPoints(True, True, False)
     plt.subplot(1, 2, 2)
-    plotDGM(c.IJoin)
-    #c.plotMesh(False)
+    c.persistenceCleanup(0.025)
+    c.plotMesh(False)
+    plt.hold(True)
+    c.plotCriticalPoints(True, True, False)
     plt.show()
+    c.plotJoinTree()
+    plt.show()
+    
+    c.saveOFFMesh("MusicD")
 
 if __name__ == '__main__3':
     T = sio.loadmat('TestDists.mat')

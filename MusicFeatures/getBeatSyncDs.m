@@ -1,4 +1,4 @@
-function [D, X, SampleDelays, bts] = getBeatSyncDs( filenameout, songfilename, tempobias, BeatsPerBlock, dim )
+function [D, X, SampleDelays, bts, beatIdx] = getBeatSyncDs( filenameout, songfilename, tempobias, BeatsPerBlock, dim )
     addpath('rastamat');
     addpath('coverssrc');
 
@@ -9,7 +9,7 @@ function [D, X, SampleDelays, bts] = getBeatSyncDs( filenameout, songfilename, t
     end
     bts = beat(XAudio, Fs, tempobias, 6);
     tempoPeriod = mean(bts(2:end) - bts(1:end-1))
-    [X, SampleDelays] = getMFCCTempoWindow(XAudio, Fs, tempoPeriod, 50);
+    [X, SampleDelays] = getMFCCTempoWindow(XAudio, Fs, tempoPeriod, 200);
     fprintf(1, 'Computing self-similarity matrices for %s...\n', songfilename);
     
     N = length(bts)-BeatsPerBlock;

@@ -58,10 +58,14 @@ def plotWassersteinMatching(I1, I2, matchidx):
         else:
             plt.plot([I1[i, 0], I2[j, 0]], [I1[i, 1], I2[j, 1]], 'g')
 
+
 ##############################################################################
 ##########            Diagram Comparison Functions                  ##########    
 ##############################################################################
 
+#Assumes first two columns of S and T are the coordinates of the persistence
+#points, but allows for other coordinate columns (which are ignored in 
+#diagonal matching)
 def getWassersteinDist(S, T):
     N = S.shape[0]
     M = T.shape[0]
@@ -80,8 +84,8 @@ def getWassersteinDist(S, T):
     cp = np.cos(np.pi/4)
     sp = np.sin(np.pi/4)
     R = np.array([[cp, -sp], [sp, cp]])
-    S = S.dot(R)
-    T = T.dot(R)
+    S = S[:, 0:2].dot(R)
+    T = T[:, 0:2].dot(R)
     D = np.zeros((N+M, N+M))
     D[0:N, 0:M] = DUL
     UR = np.max(D)*np.ones((N, N))

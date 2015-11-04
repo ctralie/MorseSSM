@@ -139,7 +139,7 @@ class SkeletonViewerCanvas(glcanvas.GLCanvas):
             if self.animationState >= self.animator.NStates:
                 self.animationState = self.animator.NStates - 1
                 self.animating = False
-            #saveImageGL(self, "%i.png"%self.animationState)
+            saveImageGL(self, "%i.png"%self.animationState)
             self.Refresh()
         
         self.SwapBuffers()
