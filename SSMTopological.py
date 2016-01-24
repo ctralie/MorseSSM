@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 import scipy.io as sio
+from FastMarching import *
 from DGMTools import *
 from Skeleton import *
 
@@ -32,6 +33,7 @@ class MorseNode(object):
         self.i = i
         self.j = j
         self.d = d
+        self.N = N
         self.listIdx = listIdx
         self.neighbs = []
         self.faces = []
@@ -48,6 +50,9 @@ class MorseNode(object):
             if n == other:
                 return True
         return False
+    
+    def get3DCoords(self, scale):
+        return np.array([self.i*scale, self.j*scale, self.d])
 
 #Check all pairwise edges
 def isTriangle(n1, n2, n3):
@@ -58,15 +63,18 @@ def isTriangle(n1, n2, n3):
 class MeshFace(object):
     def __init__(self, nodes):
         self.nodes = nodes
+        #Add pointers from nodes to this face
+        for n in nodes:
+            n.faces.append(self)
     
     #Return the 3D coordinates of each vertex in this face
-    #in each row of the return value
-    def getVerts(self):
+    #in each column of the return value
+    def getVerts(self, scale):
         N = len(self.nodes)
-        ret = np.zeros((N, 3))
+        ret = np.zeros((3, N))
         for i in range(N):
             n = self.nodes[i]
-            ret[i, :] = [n.i, n.j, n.d]
+            ret[:, i] = n.get3DCoords(scale)
         return ret
 
 #Union find "find" with path compression
@@ -107,6 +115,9 @@ class SSMComplex(object):
     ###################################################################
     ##              TOPOLOGICAL STRUCTURE ALGORITHMS                 ##
     ###################################################################
+    
+    #Explicitly make the faces of the mesh.  Constructing face objects
+    #will implicitly add pointers from vertices to faces
     def makeFaces(self):
         self.faces = []
         N = self.D.shape[0]
@@ -439,10 +450,11 @@ class SSMComplex(object):
         fout = open("%s.off"%fileprefix, 'w')
         #Don't write out the last node, which is the border node
         fout.write("OFF\n%i %i 0\n"%(len(self.nodes), len(self.faces)))
+        #Attempt to scale xy coordinates so they have a similar range as
+        #the height coordinate
         scale = np.max(self.D)/self.D.shape[0]
-        for i in range(len(self.nodes)):
-            n = self.nodes[i]
-            fout.write("%g %g %g\n"%(n.i*scale, n.j*scale, n.d))
+        for n in self.nodes:
+            fout.write("%g %g %g\n"%(tuple(n.get3DCoords(scale))))
         for f in self.faces:
             fidx = [n.listIdx for n in f.nodes]
             fout.write("%i "%len(fidx))
@@ -522,7 +534,7 @@ if __name__ == '__main__3':
     plt.show()
     
 if __name__ == '__main__':
-    N = 200
+    N = 100
     p = 1.8
     thist = 2*np.pi*(np.linspace(0, 1, N)**p)
     ps = np.linspace(0.1, 2, 20)
@@ -537,8 +549,25 @@ if __name__ == '__main__':
     c1 = SSMComplex(D)
     c1.makeMesh()
     
+    #Output SSM mesh as an OFF files
     c1.saveOFFMesh("Figure8")
+    #Output join tree
+    I1 = c1.IJoin
+    I1Gens = c1.IJoinGens
+    for i in range(I1.shape[0]):
+        plt.clf()
+        plt.subplot(1, 2, 1)
+        plotDGM(I1)
+        plt.hold(True)
+        plt.scatter(I1[i, 0], I1[i, 1], 20, 'r')
+        plt.subplot(1, 2, 2)
+        c1.plotMesh(False)
+        plt.hold(True)
+        node = I1Gens[i]
+        plt.scatter(node.j, node.i, 200, 'r', 'x')
+        plt.savefig("Join%i.png"%i)
     
+    #Output split tree
     I1 = c1.ISplit
     I1Gens = c1.ISplitGens
     for i in range(I1.shape[0]):
@@ -546,11 +575,11 @@ if __name__ == '__main__':
         plt.subplot(1, 2, 1)
         plotDGM(I1)
         plt.hold(True)
-        plt.scatter(I1[i, 0], I1[i, 1], 20, 'k')
+        plt.scatter(I1[i, 0], I1[i, 1], 20, 'r')
         plt.subplot(1, 2, 2)
         c1.plotMesh(False)
         plt.hold(True)
         node = I1Gens[i]
-        plt.scatter(node.j, node.i, 200, 'k', 'x')
-        plt.savefig("%i.png"%i)
+        plt.scatter(node.j, node.i, 200, 'r', 'x')
+        plt.savefig("Split%i.png"%i)
     

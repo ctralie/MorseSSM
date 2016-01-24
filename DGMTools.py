@@ -1,5 +1,4 @@
 # Author: Chris Tralie
-# Last updated: June 26, 2015
 # Description: Contains methods to plot and compare persistence diagrams
 #               Comparison algorithms include grabbing/sorting, persistence landscapes,
 #               and the "multiscale heat kernel" (CVPR 2015)
@@ -9,7 +8,6 @@ import matplotlib.pyplot as plt
 import skimage.draw as skdraw #Used for fast landscape triangle rastering
 import scipy.misc #Used for downsampling rasterized images avoiding aliasing
 import time #For timing kernel comparison
-import hungarian #Requires having compiled the library
 import sklearn.metrics.pairwise
 
 ##############################################################################
@@ -67,6 +65,7 @@ def plotWassersteinMatching(I1, I2, matchidx):
 #points, but allows for other coordinate columns (which are ignored in 
 #diagonal matching)
 def getWassersteinDist(S, T):
+    import hungarian #Requires having compiled the library
     N = S.shape[0]
     M = T.shape[0]
     #Handle the cases where there are no points in the diagrams
