@@ -534,6 +534,7 @@ if __name__ == '__main__3':
     plt.show()
     
 if __name__ == '__main__':
+    #Make a self-similarity image of a figure 8 to use as a test case
     N = 100
     p = 1.8
     thist = 2*np.pi*(np.linspace(0, 1, N)**p)
@@ -551,6 +552,13 @@ if __name__ == '__main__':
     
     #Output SSM mesh as an OFF files
     c1.saveOFFMesh("Figure8")
+    
+    #Output critical points
+    c1.plotMesh(False)
+    plt.hold(True)
+    c1.plotCriticalPoints()
+    plt.savefig("CriticalPoints.png")
+    
     #Output join tree
     I1 = c1.IJoin
     I1Gens = c1.IJoinGens
