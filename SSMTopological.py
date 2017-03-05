@@ -33,7 +33,6 @@ class MorseNode(object):
         self.i = i
         self.j = j
         self.d = d
-        self.N = N
         self.listIdx = listIdx
         self.neighbs = []
         self.faces = []
